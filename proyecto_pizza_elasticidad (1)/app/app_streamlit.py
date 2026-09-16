@@ -66,7 +66,7 @@ except FileNotFoundError:
 
 modelo_global, elasticidad_global, tabla_categorias = ajustar_modelos(agg)
 
-tab_exploracion, tab_simulador, tab_optimizador, tab_simulador = st.tabs(
+tab_exploracion, tab_simulador, tab_optimizador, tab_opti1 = st.tabs(
     ["📊 Exploración de datos", "🎛️ Simulador de precio", "🎯 Optimizador de precio","Optimizador por historia"]
 )
 # ---------------------------------------------------------------------------
@@ -280,7 +280,7 @@ with tab_optimizador:
 # ---------------------------------------------------------------------------
 # TAB 4 — Optimizador de precio por categoría y tamaño
 # ---------------------------------------------------------------------------
-with tab_simulador:
+with tab_opti1:
     st.subheader("Búsqueda de precio óptimo por segmento")
     st.caption("Filtra por categoría y tamaño para encontrar el rango de precio que maximiza los ingresos.")
 
