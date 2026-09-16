@@ -66,8 +66,9 @@ except FileNotFoundError:
 
 modelo_global, elasticidad_global, tabla_categorias = ajustar_modelos(agg)
 
-tab_exploracion, tab_simulador = st.tabs(["📊 Exploración de datos", "🎛️ Simulador de precio"])
-
+tab_exploracion, tab_simulador, tab_optimizador = st.tabs(
+    ["📊 Exploración de datos", "🎛️ Simulador de precio", "🎯 Optimizador de precio"]
+)
 # ---------------------------------------------------------------------------
 # TAB 1 — Exploración (nivel 1 de prototipo: informativo)
 # ---------------------------------------------------------------------------
@@ -177,3 +178,101 @@ with tab_simulador:
         "analizado y se basa en variación de precio *entre* variantes de pizza, no en "
         "un experimento temporal de precios sobre el mismo producto."
     )
+    
+# ---------------------------------------------------------------------------
+# TAB 3 — Optimizador basado en el Modelo y Simulador
+# ---------------------------------------------------------------------------
+with tab_optimizador:
+    st.subheader("🎯 Optimización paramétrica de precio (Modelo Econométrico)")
+    st.caption(
+        "Utiliza la elasticidad estimada por el modelo log-log para proyectar "
+        "la curva de ingresos y encontrar el precio que maximiza las ventas."
+    )
+
+    col_cat, col_tam = st.columns(2)
+    with col_cat:
+        cat_sel = st.selectbox("1. Selecciona Categoría:", options=sorted(agg["pizza_category"].unique()), key="opt_cat")
+    with col_tam:
+        tamanos_disp = sorted(agg[agg["pizza_category"] == cat_sel]["pizza_size"].unique())
+        tam_sel = st.selectbox("2. Selecciona Tamaño:", options=tamanos_disp, key="opt_tam")
+
+    sub_df = agg[(agg["pizza_category"] == cat_sel) & (agg["pizza_size"] == tam_sel)].copy()
+
+    if sub_df.empty:
+        st.warning("No hay registros para este segmento.")
+    else:
+        # 1. Parámetros base del segmento (promedio ponderado o medio)
+        precio_base_segmento = sub_df["precio_promedio"].mean()
+        cantidad_base_segmento = sub_df["cantidad_total"].sum()
+
+        # 2. Extraer elasticidad del modelo para esta categoría
+        coincidencia = tabla_categorias[tabla_categorias["pizza_category"] == cat_sel]
+        elasticidad_usar = coincidencia.iloc[0]["elasticidad"] if not coincidencia.empty else elasticidad_global
+
+        # 3. Barrido de precios usando la función simular_cambio_precio (-50% a +50%)
+        variaciones = [v / 100 for v in range(-50, 51, 1)]
+        simulaciones = []
+
+        for var in variaciones:
+            res = simular_cambio_precio(
+                precio_base=precio_base_segmento,
+                cantidad_base=cantidad_base_segmento,
+                elasticidad=elasticidad_usar,
+                variacion_pct=var
+            )
+            simulaciones.append({
+                "variacion_pct": var * 100,
+                "precio": res["nuevo_precio"],
+                "cantidad": res["nueva_cantidad"],
+                "ingreso": res["nuevo_ingreso"]
+            })
+
+        df_curva = pd.DataFrame(simulaciones)
+
+        # 4. Encontrar el punto de ingreso máximo según la simulación
+        punto_optimo = df_curva.loc[df_curva["ingreso"].idxmax()]
+
+        # Métricas resultantes
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Precio Base Actual", f"${precio_base_segmento:.2f}")
+        m2.metric(
+            "Precio Óptimo Estimado", 
+            f"${punto_optimo['precio']:.2f}",
+            delta=f"{punto_optimo['variacion_pct']:+.0f}% sugerido"
+        )
+        m3.metric("Ingreso Proyectado Máx.", f"${punto_optimo['ingreso']:,.0f}")
+        m4.metric("Elasticidad (ε)", f"{elasticidad_usar:.3f}")
+
+        # 5. Gráfico de la curva teórica de ingresos
+        fig_curva, ax_curva = plt.subplots(figsize=(8, 3.8))
+        sns.lineplot(data=df_curva, x="precio", y="ingreso", color="#1f77b4", linewidth=2.5, ax=ax_curva)
+        ax_curva.axvline(
+            punto_optimo["precio"], 
+            color="red", 
+            linestyle="--", 
+            label=f"Óptimo: ${punto_optimo['precio']:.2f}"
+        )
+        ax_curva.axvline(
+            precio_base_segmento, 
+            color="gray", 
+            linestyle=":", 
+            label=f"Actual: ${precio_base_segmento:.2f}"
+        )
+        ax_curva.set_title(f"Curva de Ingreso Proyectado vs. Precio ({cat_sel} - {tam_sel})")
+        ax_curva.set_xlabel("Precio Simulado ($)")
+        ax_curva.set_ylabel("Ingreso Proyectado ($)")
+        ax_curva.legend()
+        st.pyplot(fig_curva)
+
+        # Diagnóstico analítico
+        if elasticidad_usar > -1:
+            st.info(
+                f"📌 **Demanda Inelástica ({elasticidad_usar:.2f}):** Según el modelo, el mercado tolera "
+                f"incrementos de precio sin perder ingresos. El simulador ubica la optimización en "
+                f"**${punto_optimo['precio']:.2f}** dentro del rango testeado."
+            )
+        else:
+            st.warning(
+                f"📌 **Demanda Elástica ({elasticidad_usar:.2f}):** El consumidor es sensible a aumentos. "
+                f"Subir el precio por encima de **${punto_optimo['precio']:.2f}** destruirá demanda e ingreso total."
+            )
