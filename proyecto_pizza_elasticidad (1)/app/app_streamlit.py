@@ -79,21 +79,27 @@ with tab_exploracion:
     col3.metric("Ingreso total", f"${df['total_price'].sum():,.0f}")
 
     st.subheader("Curva de demanda (log-precio vs. log-cantidad por categoría)")
+    st.caption("Al segmentar por tamaño, se elimina la distorsión del volumen y se aprecia la pendiente negativa esperada.")
+
     fig, ax = plt.subplots(figsize=(7, 4))
+
     sns.set_theme(style="whitegrid")
     g = sns.lmplot(
         data=agg,
         x="ln_precio",
         y="ln_cantidad",
         hue="pizza_category",
-        height=5,
-        aspect=1.3,
-        scatter_kws={"alpha": 0.5}
+        col="pizza_size",
+        col_wrap=2,
+        height=3.5,
+        aspect=1.2,
+        scatter_kws={"alpha": 0.6}
     )
-    g.fig.subplots_adjust(top=0.92)
-    g.fig.suptitle("Modelo de regresión log-log: precio vs. demanda por categoría")
-    g.set_axis_labels("ln(precio promedio)", "ln(cantidad total vendida)")
+    g.fig.subplots_adjust(top=0.90)
+    g.fig.suptitle("Relación log-precio vs. log-cantidad por tamaño y categoría")
+    g.set_axis_labels("ln(precio)", "ln(cantidad vendida)")
     st.pyplot(g.figure)
+    plt.close("all")
     
     st.subheader("Elasticidad-precio estimada por categoría")
     st.dataframe(tabla_categorias, use_container_width=True)
