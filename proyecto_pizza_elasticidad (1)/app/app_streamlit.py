@@ -67,7 +67,7 @@ except FileNotFoundError:
 modelo_global, elasticidad_global, tabla_categorias = ajustar_modelos(agg)
 
 tab_exploracion, tab_simulador, tab_optimizador = st.tabs(
-    ["📊 Exploración de datos", "🎛️ Simulador de precio", "🎯 Optimizador de precio"]
+    ["📊 Exploración de datos", "🎛️ Simulador de precio", "🎯 Optimizador de precio","simulador original"]
 )
 # ---------------------------------------------------------------------------
 # TAB 1 — Exploración (nivel 1 de prototipo: informativo)
@@ -276,3 +276,90 @@ with tab_optimizador:
                 f"📌 **Demanda Elástica ({elasticidad_usar:.2f}):** El consumidor es sensible a aumentos. "
                 f"Subir el precio por encima de **${punto_optimo['precio']:.2f}** destruirá demanda e ingreso total."
             )
+            
+# ---------------------------------------------------------------------------
+# TAB 4 — Optimizador de precio por categoría y tamaño
+# ---------------------------------------------------------------------------
+with tab_optimizador:
+    st.subheader("Búsqueda de precio óptimo por segmento")
+    st.caption("Filtra por categoría y tamaño para encontrar el rango de precio que maximiza los ingresos.")
+
+    col_cat, col_tam = st.columns(2)
+    
+    with col_cat:
+        cat_sel = st.selectbox("Categoría:", options=sorted(agg["pizza_category"].unique()))
+    with col_tam:
+        # Filtra los tamaños disponibles para esa categoría
+        tamanos_disp = sorted(agg[agg["pizza_category"] == cat_sel]["pizza_size"].unique())
+        tam_sel = st.selectbox("Tamaño:", options=tamanos_disp)
+
+    # Filtrar el dataframe según la selección
+    sub_df = agg[(agg["pizza_category"] == cat_sel) & (agg["pizza_size"] == tam_sel)].copy()
+
+    if sub_df.empty:
+        st.warning("No hay datos disponibles para la combinación seleccionada.")
+    else:
+        # Calcular ingreso por variante observada
+        sub_df["ingreso_total"] = sub_df["precio_promedio"] * sub_df["cantidad_total"]
+        
+        # Variante con mejor rendimiento histórico
+        mejor_variante = sub_df.sort_values("ingreso_total", ascending=False).iloc[0]
+        precio_optimo_historico = mejor_variante["precio_promedio"]
+        
+        # Recuperar elasticidad de la categoría seleccionada
+        coincidencia = tabla_categorias[tabla_categorias["pizza_category"] == cat_sel]
+        elasticidad_cat = coincidencia.iloc[0]["elasticidad"] if not coincidencia.empty else elasticidad_global
+
+        # Métricas principales
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Precio óptimo observado", f"${precio_optimo_historico:.2f}")
+        m2.metric("Ingreso máx. histórico", f"${mejor_variante['ingreso_total']:,.0f}")
+        m3.metric("Elasticidad de la categoría", f"{elasticidad_cat:.2f}")
+
+        # Recomendación comercial basada en elasticidad
+        st.markdown("---")
+        st.markdown("**Diagnóstico del segmento:**")
+        if elasticidad_cat < -1:
+            st.warning(
+                f"La categoría **{cat_sel}** tiene demanda elástica ({elasticidad_cat:.2f}). "
+                f"El mercado es sensible al precio: subirlo más allá de **${precio_optimo_historico:.2f}** "
+                f"provocará caídas pronunciadas en la demanda que reducirán el ingreso total."
+            )
+        elif -1 <= elasticidad_cat <= 0:
+            st.success(
+                f"La categoría **{cat_sel}** tiene demanda inelástica ({elasticidad_cat:.2f}). "
+                f"Los clientes toleran precios mayores: existe margen para testear incrementos por encima de "
+                f"**${precio_optimo_historico:.2f}** sin sacrificar ingresos brutos."
+            )
+        else:
+            st.info(
+                f"Elasticidad observada: {elasticidad_cat:.2f}. El precio óptimo de referencia para "
+                f"este segmento es **${precio_optimo_historico:.2f}** (logrado por la variante `{mejor_variante['pizza_name']}`)."
+            )
+
+        # Gráfico comparativo de variantes dentro del grupo
+        fig_opt, ax_opt = plt.subplots(figsize=(8, 4))
+        sns.scatterplot(
+            data=sub_df,
+            x="precio_promedio",
+            y="ingreso_total",
+            size="cantidad_total",
+            sizes=(50, 400),
+            hue="pizza_name",
+            legend=False,
+            ax=ax_opt
+        )
+        ax_opt.axvline(precio_optimo_historico, color="red", linestyle="--", alpha=0.7, label=f"Óptimo: ${precio_optimo_historico:.2f}")
+        ax_opt.set_title(f"Ingresos vs. Precio — {cat_sel} ({tam_sel})")
+        ax_opt.set_xlabel("Precio promedio ($)")
+        ax_opt.set_ylabel("Ingreso total ($)")
+        ax_opt.legend()
+        st.pyplot(fig_opt)
+
+        # Tabla de variantes en ese segmento
+        st.write("Variantes evaluadas en este segmento:")
+        st.dataframe(
+            sub_df[["pizza_name", "precio_promedio", "cantidad_total", "ingreso_total"]]
+            .sort_values("ingreso_total", ascending=False),
+            use_container_width=True
+        )
