@@ -100,7 +100,35 @@ def estimar_elasticidad_por_categoria(agg: pd.DataFrame) -> pd.DataFrame:
                 "n_productos": len(sub),
             }
         )
-    return pd.DataFrame(resultados).sort_values("elasticidad")
+    return pd.DataFrame(resultados).sort_values("elasticidad")def estimar_elasticidad_global(agg):
+    # Regresión controlando por tamaño y categoría (aislando efectos de confusión)
+    modelo = smf.ols(
+        "ln_cantidad ~ ln_precio + C(pizza_size) + C(pizza_category)",
+        data=agg
+    ).fit()
+    elasticidad_global = modelo.params["ln_precio"]
+    return modelo, elasticidad_global
+
+
+def estimar_elasticidad_por_categoria(agg):
+    # Estima la elasticidad para cada categoría controlando explícitamente por tamaño
+    resultados = []
+    for cat in agg["pizza_category"].dropna().unique():
+        sub = agg[agg["pizza_category"] == cat]
+        
+        # Si la categoría tiene variación de tamaño, controlamos por tamaño
+        if sub["pizza_size"].nunique() > 1:
+            mod = smf.ols("ln_cantidad ~ ln_precio + C(pizza_size)", data=sub).fit()
+        else:
+            mod = smf.ols("ln_cantidad ~ ln_precio", data=sub).fit()
+            
+        resultados.append({
+            "pizza_category": cat,
+            "elasticidad": mod.params["ln_precio"],
+            "p_valor": mod.pvalues["ln_precio"],
+            "r2": mod.rsquared
+        })
+    return pd.DataFrame(resultados)
 
 
 def interpretar_elasticidad(valor: float) -> str:
