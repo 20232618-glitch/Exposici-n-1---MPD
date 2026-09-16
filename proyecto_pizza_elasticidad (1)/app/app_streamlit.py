@@ -78,29 +78,34 @@ with tab_exploracion:
     col2.metric("Órdenes totales", f"{df['order_id'].nunique():,}")
     col3.metric("Ingreso total", f"${df['total_price'].sum():,.0f}")
 
-    st.subheader("Curva de demanda global (log-precio vs. log-cantidad por categoría)")
-    st.caption("Muestra la distribución total agregada de precios y cantidades vendidas por cada categoría.")
+    st.subheader("Curva de demanda desagregada (Control por tamaño)")
+    st.caption("Aísla el efecto del volumen de pizzas pequeñas (S), medianas (M) y grandes (L) para evitar sesgos de escala.")
+
+    agg_filtrado = agg[agg["pizza_size"].isin(["S", "M", "L"])].copy()
     
-    sns.set_theme(style="whitegrid")
-    g_gen = sns.lmplot(
-        data=agg,
+    g_tam = sns.lmplot(
+        data=agg_filtrado,
         x="ln_precio",
         y="ln_cantidad",
         hue="pizza_category",
-        height=4.8,
-        aspect=1.4,
-        scatter_kws={"alpha": 0.5, "s": 40}
+        col="pizza_size",
+        col_order=["S", "M", "L"],
+        height=3.8,
+        aspect=1.05,
+        scatter_kws={"alpha": 0.6, "s": 35},
+        sharey=False,
+        sharex=False
     )
-    g_gen.fig.subplots_adjust(top=0.92)
-    g_gen.fig.suptitle("Modelo de regresión log-log: precio vs. demanda por categoría (Global)", fontsize=13, weight="bold")
-    g_gen.set_axis_labels("ln(precio promedio)", "ln(cantidad total vendida)")
-    st.pyplot(g_gen.figure)
+    g_tam.fig.subplots_adjust(top=0.85)
+    g_tam.fig.suptitle("Relación log-log controlando por tamaño (S, M, L)", fontsize=13, weight="bold")
+    g_tam.set_axis_labels("ln(precio promedio)", "ln(cantidad total vendida)")
+    st.pyplot(g_tam.figure)
     plt.close("all")
     
 # -----------------------------------------------------------------------
 # 1.1 GRÁFICO GENERAL (Todas las categorías y tamaños juntos)
 # -----------------------------------------------------------------------
-    st.subheader("1. Curva de demanda global (log-precio vs. log-cantidad por categoría)")
+    st.subheader("Curva de demanda global (log-precio vs. log-cantidad por categoría)")
     st.caption("Muestra la distribución total agregada de precios y cantidades vendidas por cada categoría.")
     
     sns.set_theme(style="whitegrid")
