@@ -280,7 +280,7 @@ with tab_optimizador:
 # ---------------------------------------------------------------------------
 # TAB 4 — Optimizador de precio por categoría y tamaño
 # ---------------------------------------------------------------------------
-with tab_optimizador:
+with simulador_original:
     st.subheader("Búsqueda de precio óptimo por segmento")
     st.caption("Filtra por categoría y tamaño para encontrar el rango de precio que maximiza los ingresos.")
 
