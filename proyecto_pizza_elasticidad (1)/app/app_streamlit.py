@@ -66,9 +66,143 @@ except FileNotFoundError:
 
 modelo_global, elasticidad_global, tabla_categorias = ajustar_modelos(agg)
 
-tab_exploracion, tab_simulador, tab_optimizador, tab_opti1 = st.tabs(
-    ["📊 Exploración de datos", "🎛️ Simulador de precio", "🎯 Optimizador de precio","Optimizador por historia"]
+tab_variables, tab_exploracion, tab_simulador, tab_optimizador, tab_opti1 = st.tabs(
+    ["Análisis de Variables", "📊 Exploración de datos", "🎛️ Simulador de precio", "🎯 Optimizador de precio","🎯 Optimizador por historia"]
 )
+
+# ---------------------------------------------------------------------------
+# TAB 0 — Análisis Descriptivo (Variables de la Dimensión Precio)
+# ---------------------------------------------------------------------------
+with tab_variables:
+    st.subheader("Análisis descriptivo — Dimensión Precio y Demanda")
+    st.caption(
+        "Estadísticas e indicadores clave para el modelamiento de elasticidad: "
+        "**precio unitario** (precio), **quantity** (demanda) y **total_price** (ingreso), "
+        "junto con sus dimensiones de segmentación (**pizza_category** y **pizza_size**)."
+    )
+
+    # -----------------------------------------------------------------------
+    # 1. Tabla de Estadísticos Descriptivos (Numéricas)
+    # -----------------------------------------------------------------------
+    st.markdown("#### 1. Estadísticos descriptivos — Variables numéricas")
+    vars_num = ["unit_price", "quantity", "total_price"]
+    
+    # Cálculo exacto de media, desviación, min, max y moda
+    desc_df = df[vars_num].agg(["mean", "std", "min", "max"]).T
+    modas = df[vars_num].mode().iloc[0]
+    desc_df.insert(0, "moda", modas)
+    desc_df.columns = ["moda", "media", "desv_estandar", "minimo", "maximo"]
+    
+    st.dataframe(
+        desc_df.style.format({
+            "moda": "{:.2f}",
+            "media": "{:.4f}",
+            "desv_estandar": "{:.4f}",
+            "minimo": "{:.2f}",
+            "maximo": "{:.2f}"
+        }),
+        use_container_width=True
+    )
+
+    # -----------------------------------------------------------------------
+    # 2. Resumen de Variables Categóricas
+    # -----------------------------------------------------------------------
+    st.markdown("#### 2. Distribución de variables categóricas de segmentación")
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        st.markdown(f"**pizza_category** (Moda: `{df['pizza_category'].mode()[0]}`)")
+        st.dataframe(df["pizza_category"].value_counts().rename("Frecuencia"), use_container_width=True)
+    with col_c2:
+        st.markdown(f"**pizza_size** (Moda: `{df['pizza_size'].mode()[0]}`)")
+        st.dataframe(df["pizza_size"].value_counts().rename("Frecuencia"), use_container_width=True)
+
+    st.markdown("---")
+
+    # -----------------------------------------------------------------------
+    # 3. Histogramas de Comportamiento
+    # -----------------------------------------------------------------------
+    st.markdown("#### 3. Histogramas y densidad de las variables clave")
+    sns.set_theme(style="whitegrid")
+    
+    fig_hist, ax_hist = plt.subplots(1, 3, figsize=(15, 4))
+    
+    sns.histplot(df["unit_price"], bins=20, kde=True, ax=ax_hist[0])
+    ax_hist[0].set_title("Precio unitario")
+    ax_hist[0].set_xlabel("unit_price")
+    ax_hist[0].set_ylabel("Count")
+
+    sns.histplot(df["quantity"], bins=10, ax=ax_hist[1])
+    ax_hist[1].set_title("Cantidad por línea de orden")
+    ax_hist[1].set_xlabel("quantity")
+    ax_hist[1].set_ylabel("Count")
+
+    sns.histplot(df["total_price"], bins=20, kde=True, ax=ax_hist[2])
+    ax_hist[2].set_title("Precio total")
+    ax_hist[2].set_xlabel("total_price")
+    ax_hist[2].set_ylabel("Count")
+
+    fig_hist.tight_layout()
+    st.pyplot(fig_hist)
+    plt.close(fig_hist)
+
+    # -----------------------------------------------------------------------
+    # 4. Boxplots de Dispersión
+    # -----------------------------------------------------------------------
+    st.markdown("#### 4. Dispersión y detección de valores atípicos")
+    fig_box, ax_box = plt.subplots(1, 2, figsize=(12, 4))
+    
+    sns.boxplot(y=df["unit_price"], ax=ax_box[0])
+    ax_box[0].set_title("Dispersión del precio unitario")
+    ax_box[0].set_ylabel("unit_price")
+
+    sns.boxplot(y=df["total_price"], ax=ax_box[1])
+    ax_box[1].set_title("Dispersión del precio total")
+    ax_box[1].set_ylabel("total_price")
+
+    fig_box.tight_layout()
+    st.pyplot(fig_box)
+    plt.close(fig_box)
+
+    # -----------------------------------------------------------------------
+    # 5. Precio Promedio por Categoría
+    # -----------------------------------------------------------------------
+    st.markdown("#### 5. Precio unitario promedio por categoría")
+    col_bar1, col_bar2 = st.columns([1.2, 1])
+    
+    with col_bar1:
+        fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
+        sns.barplot(
+            data=df, 
+            x="pizza_category", 
+            y="unit_price", 
+            estimator="mean", 
+            errorbar="sd", 
+            color="#2b7bba", 
+            ax=ax_bar
+        )
+        ax_bar.set_title("Precio unitario promedio por categoría (con desviación estándar)")
+        ax_bar.set_xlabel("pizza_category")
+        ax_bar.set_ylabel("unit_price")
+        ax_bar.tick_params(axis="x", rotation=20)
+        fig_bar.tight_layout()
+        st.pyplot(fig_bar)
+        plt.close(fig_bar)
+
+    with col_bar2:
+        st.markdown("**Hallazgos de la distribución:**")
+        st.write(
+            "- **Asimetría en cantidad:** La gran mayoría de pedidos se registran por exactamente 1 unidad "
+            f"(media = {df['quantity'].mean():.2f}), concentrando los picos de demanda individual."
+        )
+        st.write(
+            "- **Outliers en ingreso:** La dispersión de `total_price` presenta valores atípicos que superan "
+            f"los $60 hasta el máximo de ${df['total_price'].max():.2f}, producto de compras con múltiples cantidades."
+        )
+        st.write(
+            "- **Segmentación de precios:** La categoría `Classic` mantiene el ticket promedio más bajo, "
+            "mientras que `Chicken` y `Supreme` lideran los precios unitarios promedio."
+        )
+
 # ---------------------------------------------------------------------------
 # TAB 1 — Exploración (nivel 1 de prototipo: informativo)
 # ---------------------------------------------------------------------------
