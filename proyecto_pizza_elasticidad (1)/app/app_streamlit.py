@@ -79,7 +79,7 @@ with tab_exploracion:
 
     st.subheader("Curva de demanda (log-precio vs. log-cantidad)")
     fig, ax = plt.subplots(figsize=(7, 4))
-    sns.regplot(data=agg, x="ln_precio", y="ln_cantidad", ci=95,
+    sns.regplot(data=agg, x="ln_precio", y="ln_cantidad", hue="pizza_category", ci=95,
                 scatter_kws={"alpha": 0.5}, ax=ax)
     ax.set_xlabel("ln(precio promedio)")
     ax.set_ylabel("ln(cantidad total vendida)")
