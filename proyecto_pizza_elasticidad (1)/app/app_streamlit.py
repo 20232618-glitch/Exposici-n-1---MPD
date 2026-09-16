@@ -78,29 +78,46 @@ with tab_exploracion:
     col2.metric("Órdenes totales", f"{df['order_id'].nunique():,}")
     col3.metric("Ingreso total", f"${df['total_price'].sum():,.0f}")
 
-    st.subheader("Curva de demanda (log-precio vs. log-cantidad por categoría)")
-    st.caption("Al segmentar por tamaño, se elimina la distorsión del volumen y se aprecia la pendiente negativa esperada.")
-
-    fig, ax = plt.subplots(figsize=(7, 4))
-
+    st.subheader("Curva de demanda global (log-precio vs. log-cantidad por categoría)")
+    st.caption("Muestra la distribución total agregada de precios y cantidades vendidas por cada categoría.")
+    
     sns.set_theme(style="whitegrid")
-    g = sns.lmplot(
+    g_gen = sns.lmplot(
         data=agg,
         x="ln_precio",
         y="ln_cantidad",
         hue="pizza_category",
-        col="pizza_size",
-        col_wrap=2,
-        height=3.5,
-        aspect=1.2,
-        scatter_kws={"alpha": 0.6}
+        height=4.8,
+        aspect=1.4,
+        scatter_kws={"alpha": 0.5, "s": 40}
     )
-    g.fig.subplots_adjust(top=0.90)
-    g.fig.suptitle("Relación log-precio vs. log-cantidad por tamaño y categoría")
-    g.set_axis_labels("ln(precio)", "ln(cantidad vendida)")
-    st.pyplot(g.figure)
+    g_gen.fig.subplots_adjust(top=0.92)
+    g_gen.fig.suptitle("Modelo de regresión log-log: precio vs. demanda por categoría (Global)", fontsize=13, weight="bold")
+    g_gen.set_axis_labels("ln(precio promedio)", "ln(cantidad total vendida)")
+    st.pyplot(g_gen.figure)
     plt.close("all")
     
+# -----------------------------------------------------------------------
+# 1.1 GRÁFICO GENERAL (Todas las categorías y tamaños juntos)
+# -----------------------------------------------------------------------
+    st.subheader("1. Curva de demanda global (log-precio vs. log-cantidad por categoría)")
+    st.caption("Muestra la distribución total agregada de precios y cantidades vendidas por cada categoría.")
+    
+    sns.set_theme(style="whitegrid")
+    g_gen = sns.lmplot(
+        data=agg,
+        x="ln_precio",
+        y="ln_cantidad",
+        hue="pizza_category",
+        height=4.8,
+        aspect=1.4,
+        scatter_kws={"alpha": 0.5, "s": 40}
+    )
+    g_gen.fig.subplots_adjust(top=0.92)
+    g_gen.fig.suptitle("Modelo de regresión log-log: precio vs. demanda por categoría (Global)", fontsize=13, weight="bold")
+    g_gen.set_axis_labels("ln(precio promedio)", "ln(cantidad total vendida)")
+    st.pyplot(g_gen.figure)
+    plt.close("all")
     st.subheader("Elasticidad-precio estimada por categoría")
     st.dataframe(tabla_categorias, use_container_width=True)
 
@@ -110,6 +127,7 @@ with tab_exploracion:
         .head(10)[["pizza_name", "pizza_category", "pizza_size", "precio_promedio", "cantidad_total"]],
         use_container_width=True,
     )
+
 
 # ---------------------------------------------------------------------------
 # TAB 2 — Simulador interactivo (nivel 2 de prototipo: widgets controlados)
