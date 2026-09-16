@@ -66,7 +66,7 @@ except FileNotFoundError:
 
 modelo_global, elasticidad_global, tabla_categorias = ajustar_modelos(agg)
 
-tab_exploracion, tab_simulador, tab_optimizador = st.tabs(
+tab_exploracion, tab_simulador, tab_optimizador, simulador_original = st.tabs(
     ["📊 Exploración de datos", "🎛️ Simulador de precio", "🎯 Optimizador de precio","simulador original"]
 )
 # ---------------------------------------------------------------------------
