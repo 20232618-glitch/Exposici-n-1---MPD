@@ -527,7 +527,7 @@ with tab_optimizador:
     )
             
 # ---------------------------------------------------------------------------
-# TAB 4 — Optimizador de precio por categoría y tamaño
+# TAB 4 — Optimizador por Historia y Desempeño Real de la Variante
 # ---------------------------------------------------------------------------
 with tab_opti1:
   st.subheader("🏆 Desempeño histórico y precio de referencia por variante")
@@ -576,49 +576,59 @@ with tab_opti1:
       f" {len(grupo_pares)} variantes competidoras directas)"
   )
 
-  # Gráfico comparativo de variantes del segmento resaltando la seleccionada
+  # Gráfico comparativo usando directamente ax.scatter para evitar conflictos de leyenda
   fig_comp, ax_comp = plt.subplots(figsize=(8, 4))
-  grupo_pares["es_seleccionada"] = grupo_pares["pizza_name"] == fila_h["pizza_name"]
-
-  # Puntos de los competidores
-  sns.scatterplot(
-      data=grupo_pares[~grupo_pares["es_seleccionada"]],
-      x="precio_promedio",
-      y="ingreso_total",
-      size="cantidad_total",
-      sizes=(60, 250),
-      color="#90caf9",
-      alpha=0.7,
-      ax=ax_comp,
-      label="Otras variantes del segmento",
+  grupo_pares["es_seleccionada"] = (
+      grupo_pares["pizza_name"] == fila_h["pizza_name"]
   )
+
+  df_otros = grupo_pares[~grupo_pares["es_seleccionada"]]
+  df_sel = grupo_pares[grupo_pares["es_seleccionada"]]
+
+  # Puntos de competidores
+  if not df_otros.empty:
+    ax_comp.scatter(
+        df_otros["precio_promedio"],
+        df_otros["ingreso_total"],
+        s=df_otros["cantidad_total"] / 4,
+        color="#1976d2",
+        alpha=0.6,
+        edgecolors="none",
+        label="Otras variantes del segmento",
+    )
 
   # Punto destacado de la variante seleccionada
-  sns.scatterplot(
-      data=grupo_pares[grupo_pares["es_seleccionada"]],
-      x="precio_promedio",
-      y="ingreso_total",
-      size="cantidad_total",
-      sizes=(120, 300),
-      color="red",
-      marker="*",
-      ax=ax_comp,
-      label=f"Seleccionada: {fila_h['pizza_name']}",
-  )
+  if not df_sel.empty:
+    ax_comp.scatter(
+        df_sel["precio_promedio"],
+        df_sel["ingreso_total"],
+        s=df_sel["cantidad_total"] / 3 + 100,
+        color="#d32f2f",
+        marker="*",
+        edgecolors="black",
+        linewidth=0.8,
+        label=f"Seleccionada: {fila_h['pizza_name']}",
+        zorder=5,
+    )
 
+  # Línea de referencia del líder del segmento
   ax_comp.axvline(
       lider_grupo["precio_promedio"],
-      color="green",
+      color="#2e7d32",
       linestyle="--",
-      alpha=0.7,
+      alpha=0.8,
+      linewidth=1.8,
       label=f"Precio Líder: ${lider_grupo['precio_promedio']:.2f}",
   )
+
   ax_comp.set_title(
       f"Posición Competitiva en {cat_h} ({tam_h})", fontsize=11, weight="bold"
   )
   ax_comp.set_xlabel("Precio Promedio ($)")
   ax_comp.set_ylabel("Ingreso Total ($)")
   ax_comp.legend(loc="best")
+  ax_comp.grid(True, linestyle=":", alpha=0.6)
+
   st.pyplot(fig_comp)
   plt.close(fig_comp)
 
@@ -631,5 +641,5 @@ with tab_opti1:
           "cantidad_total",
           "ingreso_total",
       ]],
-      use_container_width=True,
+      width="stretch",
   )
