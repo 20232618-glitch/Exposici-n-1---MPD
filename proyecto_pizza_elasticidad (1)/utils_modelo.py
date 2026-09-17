@@ -75,7 +75,10 @@ def agregar_por_producto(df: pd.DataFrame) -> pd.DataFrame:
 #    ln(Q) = b0 + b1*ln(P) + controles categóricos   ->   b1 = elasticidad
 # ---------------------------------------------------------------------------
 def estimar_elasticidad_global(agg: pd.DataFrame):
-    """Ajusta un modelo log-log controlando por categoría y tamaño."""
+    """
+    Ajusta un modelo log-log controlando por categoría y tamaño
+    (regresión controlando por tamaño y categoría, aislando efectos de confusión).
+    """
     modelo = smf.ols(
         "ln_cantidad ~ ln_precio + C(pizza_category) + C(pizza_size)",
         data=agg,
@@ -85,12 +88,19 @@ def estimar_elasticidad_global(agg: pd.DataFrame):
 
 
 def estimar_elasticidad_por_categoria(agg: pd.DataFrame) -> pd.DataFrame:
-    """Ajusta un log-log independiente para cada categoría de pizza."""
+    """
+    Ajusta un log-log independiente para cada categoría de pizza,
+    controlando explícitamente por tamaño cuando la categoría tiene
+    más de un tamaño disponible.
+    """
     resultados = []
     for categoria, sub in agg.groupby("pizza_category"):
         if len(sub) < 5:
             continue
-        modelo = smf.ols("ln_cantidad ~ ln_precio", data=sub).fit()
+        if sub["pizza_size"].nunique() > 1:
+            modelo = smf.ols("ln_cantidad ~ ln_precio + C(pizza_size)", data=sub).fit()
+        else:
+            modelo = smf.ols("ln_cantidad ~ ln_precio", data=sub).fit()
         resultados.append(
             {
                 "pizza_category": categoria,
@@ -100,35 +110,7 @@ def estimar_elasticidad_por_categoria(agg: pd.DataFrame) -> pd.DataFrame:
                 "n_productos": len(sub),
             }
         )
-    return pd.DataFrame(resultados).sort_values("elasticidad")def estimar_elasticidad_global(agg):
-    # Regresión controlando por tamaño y categoría (aislando efectos de confusión)
-    modelo = smf.ols(
-        "ln_cantidad ~ ln_precio + C(pizza_size) + C(pizza_category)",
-        data=agg
-    ).fit()
-    elasticidad_global = modelo.params["ln_precio"]
-    return modelo, elasticidad_global
-
-
-def estimar_elasticidad_por_categoria(agg):
-    # Estima la elasticidad para cada categoría controlando explícitamente por tamaño
-    resultados = []
-    for cat in agg["pizza_category"].dropna().unique():
-        sub = agg[agg["pizza_category"] == cat]
-        
-        # Si la categoría tiene variación de tamaño, controlamos por tamaño
-        if sub["pizza_size"].nunique() > 1:
-            mod = smf.ols("ln_cantidad ~ ln_precio + C(pizza_size)", data=sub).fit()
-        else:
-            mod = smf.ols("ln_cantidad ~ ln_precio", data=sub).fit()
-            
-        resultados.append({
-            "pizza_category": cat,
-            "elasticidad": mod.params["ln_precio"],
-            "p_valor": mod.pvalues["ln_precio"],
-            "r2": mod.rsquared
-        })
-    return pd.DataFrame(resultados)
+    return pd.DataFrame(resultados).sort_values("elasticidad")
 
 
 def interpretar_elasticidad(valor: float) -> str:
