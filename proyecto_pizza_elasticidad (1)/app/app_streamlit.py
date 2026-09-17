@@ -272,9 +272,15 @@ with tab_exploracion:
 # TAB 2 — Simulador interactivo (nivel 2 de prototipo: widgets controlados)
 # ---------------------------------------------------------------------------
 with tab_simulador:
+    st.subheader("🎛️ Simulador interactivo de sensibilidad de demanda")
+    st.caption(
+        "Simula el impacto de variaciones en el precio unitario sobre el volumen de ventas "
+        "y la recaudación bruta esperada."
+    )
+
+    # 1. Validación de la elasticidad global controlada
     st.markdown(
-        f"**Elasticidad-precio global del modelo (log-log, controlando por "
-        f"categoría y tamaño): `{elasticidad_global:.3f}`**  \n"
+        f"**Elasticidad-precio global del modelo (controlando por categoría y tamaño): `{elasticidad_global:.3f}`**  \n"
         f"{interpretar_elasticidad(elasticidad_global)}"
     )
 
@@ -284,24 +290,48 @@ with tab_simulador:
         pizza_sel = st.selectbox(
             "Selecciona una variante de pizza",
             options=agg["pizza_name"] + " (" + agg["pizza_size"] + ")",
+            key="sim_pizza_sel"
         )
+        
+        # Dejamos por defecto False para usar el modelo global consistente
         usar_elasticidad_categoria = st.checkbox(
-            "Usar elasticidad específica de la categoría (en vez de la global)",
-            value=True,
+            "Usar elasticidad específica de la categoría",
+            value=False,
+            help="Atención: la elasticidad por categoría sin desagregar tamaño puede presentar sesgos estadísticos."
         )
+        
         variacion_pct = st.slider(
-            "Variación de precio a simular (%)", min_value=-30, max_value=30,
-            value=10, step=1,
+            "Variación de precio a simular (%)", 
+            min_value=-30, 
+            max_value=30,
+            value=10, 
+            step=1,
+            key="sim_slider_pct"
         ) / 100
 
+    # Fila de datos del producto base seleccionado
     fila = agg[(agg["pizza_name"] + " (" + agg["pizza_size"] + ")") == pizza_sel].iloc[0]
 
+    # Determinación y saneamiento de la elasticidad a aplicar
     elasticidad_usar = elasticidad_global
+    advertencia_consistencia = None
+
     if usar_elasticidad_categoria:
         coincidencia = tabla_categorias[tabla_categorias["pizza_category"] == fila["pizza_category"]]
         if not coincidencia.empty:
-            elasticidad_usar = coincidencia.iloc[0]["elasticidad"]
+            e_cat = coincidencia.iloc[0]["elasticidad"]
+            # Salvaguarda: la ley de la demanda exige pendiente negativa
+            if e_cat >= 0:
+                advertencia_consistencia = (
+                    f"La elasticidad no controlada de la categoría **{fila['pizza_category']}** es positiva ({e_cat:.3f}) "
+                    f"debido al sesgo de volumen por tamaño de pizza. Para mantener coherencia económica con la ley de la demanda, "
+                    f"el simulador aplica la elasticidad global controlada ({elasticidad_global:.3f})."
+                )
+                elasticidad_usar = elasticidad_global
+            else:
+                elasticidad_usar = e_cat
 
+    # Cálculo paramétrico del simulador
     resultado = simular_cambio_precio(
         precio_base=fila["precio_promedio"],
         cantidad_base=fila["cantidad_total"],
@@ -310,36 +340,58 @@ with tab_simulador:
     )
 
     with col_der:
-        st.markdown(f"**Elasticidad aplicada a esta simulación: `{elasticidad_usar:.3f}`**")
+        st.markdown(f"**Elasticidad aplicada: `{elasticidad_usar:.3f}`**")
+        
+        if advertencia_consistencia:
+            st.warning(advertencia_consistencia)
+
         m1, m2, m3 = st.columns(3)
         m1.metric(
-            "Precio", f"${resultado['nuevo_precio']:.2f}",
-            delta=f"{variacion_pct*100:+.0f}%",
+            "Nuevo Precio", 
+            f"${resultado['nuevo_precio']:.2f}",
+            delta=f"{variacion_pct*100:+.0f}%"
         )
         m2.metric(
-            "Cantidad estimada", f"{resultado['nueva_cantidad']:.0f}",
-            delta=f"{resultado['variacion_cantidad_pct']*100:+.1f}%",
+            "Demanda Estimada (Q)", 
+            f"{resultado['nueva_cantidad']:.0f} u.",
+            delta=f"{resultado['variacion_cantidad_pct']*100:+.1f}%"
         )
         m3.metric(
-            "Ingreso estimado", f"${resultado['nuevo_ingreso']:,.0f}",
-            delta=f"{resultado['variacion_ingreso_pct']*100:+.1f}%",
+            "Ingreso Estimado (P × Q)", 
+            f"${resultado['nuevo_ingreso']:,.0f}",
+            delta=f"{resultado['variacion_ingreso_pct']*100:+.1f}%"
         )
 
-        if resultado["variacion_ingreso_pct"] > 0:
-            st.success(
-                "Bajo el supuesto de elasticidad constante, este cambio de precio "
-                "incrementaría el ingreso esperado de esta variante."
-            )
-        else:
-            st.info(
-                "Bajo el supuesto de elasticidad constante, este cambio de precio "
-                "reduciría el ingreso esperado de esta variante."
-            )
+        # Diagnóstico analítico de negocio
+        st.markdown("---")
+        if variacion_pct > 0:
+            if resultado['variacion_cantidad_pct'] < 0 and resultado['variacion_ingreso_pct'] > 0:
+                st.success(
+                    f"✔ **Comportamiento coherente (Demanda Inelástica):** Al subir el precio un **{variacion_pct*100:+.0f}%**, "
+                    f"la cantidad demandada cae un **{abs(resultado['variacion_cantidad_pct']*100):.1f}%** (respetando la ley de la demanda). "
+                    f"Sin embargo, el ingreso total se incrementa en **{resultado['variacion_ingreso_pct']*100:+.1f}%** porque el mayor precio unitario "
+                    f"absorbe la ligera contracción de pedidos."
+                )
+            elif resultado['variacion_cantidad_pct'] < 0 and resultado['variacion_ingreso_pct'] <= 0:
+                st.info(
+                    f"⚠ **Demanda Elástica:** La subida de precio provoca una fuga de clientes de **{abs(resultado['variacion_cantidad_pct']*100):.1f}%**, "
+                    f"reduciendo la facturación total en **{resultado['variacion_ingreso_pct']*100:.1f}%**."
+                )
+        elif variacion_pct < 0:
+            if resultado['variacion_cantidad_pct'] > 0 and resultado['variacion_ingreso_pct'] <= 0:
+                st.info(
+                    f"✔ **Comportamiento coherente:** Al bajar el precio un **{abs(variacion_pct*100):.0f}%**, "
+                    f"las unidades vendidas aumentan un **{resultado['variacion_cantidad_pct']*100:+.1f}%**, pero no compensa el descuento, "
+                    f"reduciendo el ingreso bruto en **{resultado['variacion_ingreso_pct']*100:.1f}%**."
+                )
+            else:
+                st.success(
+                    f"✔ El descuento en precio estimula el volumen de ventas en **{resultado['variacion_cantidad_pct']*100:+.1f}%**, aumentando la facturación."
+                )
 
     st.caption(
-        "Nota metodológica: la simulación asume elasticidad constante en el rango "
-        "analizado y se basa en variación de precio *entre* variantes de pizza, no en "
-        "un experimento temporal de precios sobre el mismo producto."
+        "Nota metodológica: El simulador asume elasticidad constante en el rango local analizado "
+        "y se basa en la sensibilidad estimada controlando por tamaño y categoría."
     )
     
 # ---------------------------------------------------------------------------
